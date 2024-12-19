@@ -22,7 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return (
         <div className="min-h-screen">
             <header className="flex justify-between items-center p-4 bg-background">
-                <h1 className="text-2xl font-bold">Bill Splitter</h1>
+                <h1 className="text-2xl font-bold">Split Away</h1>
                 <div className="flex items-center space-x-4">
                     <Button
                         variant="ghost"

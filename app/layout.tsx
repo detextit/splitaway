@@ -18,7 +18,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Fair Share - Split your expenses",
+  title: "Split Away - Split your expenses",
   description: "Not throwing away my split!",
 };
 

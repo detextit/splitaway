@@ -19,6 +19,17 @@ type Settlement = {
 }
 
 export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) {
+    // Calculate total expenses
+    const calculateTotal = () => {
+        return expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+    };
+
+    // Calculate average per person
+    const calculateAverage = () => {
+        if (!group || group.members.length === 0) return 0;
+        return calculateTotal() / group.members.length;
+    };
+
     const calculateSettlements = (): Settlement[] => {
         if (!debts.length) return []
 
@@ -90,7 +101,7 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                                     <li key={index} className="flex justify-between items-center">
                                         <span>{debt.name}</span>
                                         <span className={`font-mono ${debt.amount < 0 ? "text-red-500" : "text-green-500"}`}>
-                                            ${Math.abs(debt.amount).toFixed(2)}
+                                            ${Math.abs(Number(debt.amount)).toFixed(2)}
                                             {debt.amount < 0 ? " (owes)" : " (owed)"}
                                         </span>
                                     </li>
@@ -101,9 +112,9 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                         <div className="rounded-lg bg-muted p-4">
                             <h3 className="font-semibold mb-2">Group Statistics</h3>
                             <div className="space-y-1 text-sm">
-                                <p>Total Expenses: ${expenses.reduce((sum, exp) => sum + exp.amount, 0).toFixed(2)}</p>
+                                <p>Total Expenses: ${calculateTotal().toFixed(2)}</p>
                                 <p>Number of Expenses: {expenses.length}</p>
-                                <p>Average per Person: ${(expenses.reduce((sum, exp) => sum + exp.amount, 0) / group.members.length).toFixed(2)}</p>
+                                <p>Average per Person: ${calculateAverage().toFixed(2)}</p>
                             </div>
                         </div>
                     </TabsContent>
@@ -113,25 +124,28 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                             <h3 className="font-semibold mb-4">Settlement Plan</h3>
                             {calculateSettlements().length > 0 ? (
                                 <div className="space-y-3">
-                                    {calculateSettlements().map((settlement, index) => (
-                                        <div
-                                            key={index}
-                                            className="flex items-center justify-between p-2 bg-background rounded-lg"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-red-500 font-medium">
-                                                    {settlement.from}
-                                                </span>
-                                                <span className="text-muted-foreground">pays</span>
-                                                <span className="text-green-500 font-medium">
-                                                    {settlement.to}
+                                    {calculateSettlements().map((settlement, index) => {
+                                        console.log('Settlement data:', settlement);
+                                        return (
+                                            <div
+                                                key={index}
+                                                className="flex items-center justify-between p-2 bg-background rounded-lg"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-red-500 font-medium">
+                                                        {settlement.from}
+                                                    </span>
+                                                    <span className="text-muted-foreground">pays</span>
+                                                    <span className="text-green-500 font-medium">
+                                                        {settlement.to || 'N/A'}
+                                                    </span>
+                                                </div>
+                                                <span className="font-mono font-semibold">
+                                                    ${Number(settlement.amount).toFixed(2)}
                                                 </span>
                                             </div>
-                                            <span className="font-mono font-semibold">
-                                                ${settlement.amount.toFixed(2)}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <p className="text-center text-muted-foreground">
@@ -144,38 +158,41 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                     <TabsContent value="expenses">
                         <ScrollArea className="h-[400px] pr-4">
                             <div className="space-y-4">
-                                {expenses.map((expense, index) => (
-                                    <div key={index} className="border rounded-lg p-4">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <h4 className="font-semibold">{expense.description}</h4>
-                                                <p className="text-sm text-muted-foreground">
-                                                    Paid by {expense.paidBy}
-                                                </p>
-                                                <div className="mt-2 text-sm">
-                                                    <p className="text-muted-foreground">Split between:</p>
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {expense.splitWith.map((member, i) => (
-                                                            <span
-                                                                key={i}
-                                                                className="bg-muted px-2 py-0.5 rounded-full text-xs"
-                                                            >
-                                                                {member}
-                                                            </span>
-                                                        ))}
+                                {expenses.map((expense, index) => {
+                                    console.log('Expense data:', expense);
+                                    return (
+                                        <div key={index} className="border rounded-lg p-4">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <h4 className="font-semibold">{expense.description}</h4>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Paid by {expense.paidBy || 'Unknown'}
+                                                    </p>
+                                                    <div className="mt-2 text-sm">
+                                                        <p className="text-muted-foreground">Split between:</p>
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {expense.splitWith.map((member, i) => (
+                                                                <span
+                                                                    key={i}
+                                                                    className="bg-muted px-2 py-0.5 rounded-full text-xs"
+                                                                >
+                                                                    {member}
+                                                                </span>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <span className="font-mono font-semibold">
+                                                    ${Number(expense.amount).toFixed(2)}
+                                                </span>
                                             </div>
-                                            <span className="font-mono font-semibold">
-                                                ${expense.amount.toFixed(2)}
-                                            </span>
+                                            <p className="text-xs text-muted-foreground">
+                                                {new Date(expense.date).toLocaleDateString()} at{' '}
+                                                {new Date(expense.date).toLocaleTimeString()}
+                                            </p>
                                         </div>
-                                        <p className="text-xs text-muted-foreground">
-                                            {new Date(expense.date).toLocaleDateString()} at{' '}
-                                            {new Date(expense.date).toLocaleTimeString()}
-                                        </p>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </ScrollArea>
                     </TabsContent>
