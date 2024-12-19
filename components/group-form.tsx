@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { UserPlus, Trash2, X } from 'lucide-react'
+import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger } from "./ui/menubar"
 
 export type GroupMember = {
     name: string
@@ -11,26 +13,31 @@ export type GroupMember = {
 }
 
 export type Group = {
+    id: string
     name: string
     members: GroupMember[]
 }
 
 export interface GroupFormProps {
     onGroupCreate: (group: Group) => void
+    onGroupDelete?: (groupId: string) => void
     existingGroup?: Group | null
+    defaultMember?: { name: string; email: string }
 }
 
-export function GroupForm({ onGroupCreate, existingGroup }: GroupFormProps) {
-    const [groupName, setGroupName] = useState('')
-    const [members, setMembers] = useState<GroupMember[]>([{ name: '', email: '' }])
+export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, defaultMember }: GroupFormProps) {
+    const [groupName, setGroupName] = useState(existingGroup?.name || '')
+    const [members, setMembers] = useState<{ name: string; email: string }[]>(
+        existingGroup?.members || (defaultMember ? [defaultMember] : [])
+    )
+    const [newMember, setNewMember] = useState('')
 
-    // Populate form when existingGroup changes
+    // Add this effect to reset form when existingGroup changes
     useEffect(() => {
-        if (existingGroup) {
-            setGroupName(existingGroup.name)
-            setMembers(existingGroup.members)
-        }
-    }, [existingGroup])
+        setGroupName(existingGroup?.name || '')
+        setMembers(existingGroup?.members || (defaultMember ? [defaultMember] : []))
+        setNewMember('')
+    }, [existingGroup, defaultMember])
 
     const addMember = () => {
         setMembers([...members, { name: '', email: '' }])
@@ -57,6 +64,7 @@ export function GroupForm({ onGroupCreate, existingGroup }: GroupFormProps) {
         }
 
         const newGroup: Group = {
+            id: existingGroup?.id || crypto.randomUUID(),
             name: groupName,
             members
         }
@@ -68,6 +76,32 @@ export function GroupForm({ onGroupCreate, existingGroup }: GroupFormProps) {
         <Card>
             <CardHeader>
                 <CardTitle>{existingGroup ? 'Edit Group' : 'Create Group'}</CardTitle>
+                <Menubar className="border-none p-0">
+                    <MenubarMenu>
+                        <MenubarTrigger
+                            onClick={addMember}
+                            className="cursor-pointer gap-2"
+                        >
+                            <UserPlus className="h-4 w-4" />
+                            Add Member
+                        </MenubarTrigger>
+                    </MenubarMenu>
+                    {existingGroup && onGroupDelete && (
+                        <MenubarMenu>
+                            <MenubarTrigger
+                                onClick={() => {
+                                    if (window.confirm('Are you sure you want to delete this group?')) {
+                                        onGroupDelete(existingGroup.id)
+                                    }
+                                }}
+                                className="cursor-pointer gap-2"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Group
+                            </MenubarTrigger>
+                        </MenubarMenu>
+                    )}
+                </Menubar>
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,19 +128,18 @@ export function GroupForm({ onGroupCreate, existingGroup }: GroupFormProps) {
                             {members.length > 1 && (
                                 <Button
                                     type="button"
-                                    variant="destructive"
+                                    variant="ghost"
                                     size="sm"
                                     onClick={() => removeMember(index)}
+                                    className="h-8 w-8 p-0"
                                 >
-                                    Remove
+                                    <X className="h-4 w-4" />
+                                    <span className="sr-only">Remove</span>
                                 </Button>
                             )}
                         </div>
                     ))}
                     <div className="flex gap-2">
-                        <Button type="button" variant="outline" onClick={addMember}>
-                            Add Member
-                        </Button>
                         <Button type="submit">
                             {existingGroup ? 'Update Group' : 'Create Group'}
                         </Button>
