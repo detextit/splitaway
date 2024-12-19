@@ -11,6 +11,7 @@ export type GroupMember = {
 }
 
 export type Group = {
+    id: string
     name: string
     members: GroupMember[]
 }
@@ -18,19 +19,22 @@ export type Group = {
 export interface GroupFormProps {
     onGroupCreate: (group: Group) => void
     existingGroup?: Group | null
+    defaultMember?: { name: string; email: string }
 }
 
-export function GroupForm({ onGroupCreate, existingGroup }: GroupFormProps) {
-    const [groupName, setGroupName] = useState('')
-    const [members, setMembers] = useState<GroupMember[]>([{ name: '', email: '' }])
+export function GroupForm({ onGroupCreate, existingGroup, defaultMember }: GroupFormProps) {
+    const [groupName, setGroupName] = useState(existingGroup?.name || '')
+    const [members, setMembers] = useState<{ name: string; email: string }[]>(
+        existingGroup?.members || (defaultMember ? [defaultMember] : [])
+    )
+    const [newMember, setNewMember] = useState('')
 
-    // Populate form when existingGroup changes
+    // Add this effect to reset form when existingGroup changes
     useEffect(() => {
-        if (existingGroup) {
-            setGroupName(existingGroup.name)
-            setMembers(existingGroup.members)
-        }
-    }, [existingGroup])
+        setGroupName(existingGroup?.name || '')
+        setMembers(existingGroup?.members || (defaultMember ? [defaultMember] : []))
+        setNewMember('')
+    }, [existingGroup, defaultMember])
 
     const addMember = () => {
         setMembers([...members, { name: '', email: '' }])
@@ -57,6 +61,7 @@ export function GroupForm({ onGroupCreate, existingGroup }: GroupFormProps) {
         }
 
         const newGroup: Group = {
+            id: crypto.randomUUID(),
             name: groupName,
             members
         }
