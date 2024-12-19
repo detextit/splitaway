@@ -1,32 +1,69 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Group } from "./group-form"
+import { Expense } from "@/app/page"
 
-export function ExpenseForm() {
+interface ExpenseFormProps {
+    group: Group
+    onExpenseAdd: (expense: Expense) => void
+}
+
+export function ExpenseForm({ group, onExpenseAdd }: ExpenseFormProps) {
     const [amount, setAmount] = useState("")
     const [description, setDescription] = useState("")
     const [paidBy, setPaidBy] = useState("")
+    const [selectedMembers, setSelectedMembers] = useState<string[]>([])
+
+    useEffect(() => {
+        setSelectedMembers(group.members.map(m => m.name))
+        if (paidBy && !group.members.some(m => m.name === paidBy)) {
+            setPaidBy("")
+        }
+    }, [group, paidBy])
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        // Here you would typically send this data to your backend
-        console.log({ amount, description, paidBy })
+
+        const newExpense: Expense = {
+            amount: parseFloat(amount),
+            description,
+            paidBy,
+            date: new Date(),
+            splitWith: selectedMembers
+        }
+
+        onExpenseAdd(newExpense)
+
         // Reset form
         setAmount("")
         setDescription("")
         setPaidBy("")
+        setSelectedMembers(group.members.map(m => m.name))
+    }
+
+    const toggleMember = (memberName: string) => {
+        if (memberName === paidBy) {
+            return // Don't allow deselecting the payer
+        }
+
+        setSelectedMembers(prev =>
+            prev.includes(memberName)
+                ? prev.filter(name => name !== memberName)
+                : [...prev, memberName]
+        )
     }
 
     return (
-        <Card className="w-[350px]">
+        <Card>
             <CardHeader>
-                <CardTitle>Add Expense</CardTitle>
-                <CardDescription>Enter the details of the new expense.</CardDescription>
+                <CardTitle>Add Expense for {group.name}</CardTitle>
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -35,6 +72,8 @@ export function ExpenseForm() {
                         <Input
                             id="amount"
                             type="number"
+                            step="0.01"
+                            min="0"
                             placeholder="0.00"
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
@@ -55,15 +94,35 @@ export function ExpenseForm() {
                         <Label htmlFor="paidBy">Paid By</Label>
                         <Select onValueChange={setPaidBy} value={paidBy}>
                             <SelectTrigger>
-                                <SelectValue placeholder="Select who paid" />
+                                <SelectValue placeholder="Select member" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="you">You</SelectItem>
-                                <SelectItem value="alice">Alice</SelectItem>
-                                <SelectItem value="bob">Bob</SelectItem>
-                                <SelectItem value="charlie">Charlie</SelectItem>
+                                {group.members.map((member, index) => (
+                                    <SelectItem key={index} value={member.name}>
+                                        {member.name}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Split With</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {group.members.map((member, index) => (
+                                <div key={index} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`member-${index}`}
+                                        checked={selectedMembers.includes(member.name)}
+                                        onCheckedChange={() => toggleMember(member.name)}
+                                        disabled={member.name === paidBy}
+                                    />
+                                    <Label htmlFor={`member-${index}`}>
+                                        {member.name}
+                                        {member.name === paidBy && " (Payer)"}
+                                    </Label>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                     <Button type="submit" className="w-full">Add Expense</Button>
                 </form>
