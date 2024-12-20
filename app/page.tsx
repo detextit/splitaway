@@ -9,8 +9,23 @@ import { useState, useEffect } from "react"
 import { BalanceSummary } from "@/components/balance-summary"
 import { Button } from "@/components/ui/button"
 import { Trash } from "lucide-react"
+import { ReceiptUpload } from "@/components/receipt-upload"
+import ReceiptProcessor from "@/components/receipt-processor"
 
-// Remove mock data and add type definitions
+export type Item = {
+  name: string
+  amount: number
+  sharedWith: string[]
+}
+
+export type Receipt = {
+  id: string
+  nameOfStore: string
+  total: number
+  paidBy: string
+  date: Date
+}
+
 export type Debt = {
   name: string
   amount: number
@@ -35,6 +50,14 @@ export default function Home() {
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null)
   const [expensesByGroup, setExpensesByGroup] = useState<GroupExpenses>({})
   const [showGroupForm, setShowGroupForm] = useState(true)
+  const [receiptData, setReceiptData] = useState<{
+    receipt: Receipt | null;
+    items: Item[];
+  }>({
+    receipt: null,
+    items: [],
+  });
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -135,18 +158,35 @@ export default function Home() {
       const response = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expense, groupId: currentGroup.id })
+        body: JSON.stringify({
+          expense,
+          groupId: currentGroup.id
+        })
       });
 
-      if (!response.ok) throw new Error('Failed to create expense');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create expense');
+      }
 
-      const newExpense = await response.json();
+      // Fetch latest expenses after adding new one
+      const expensesResponse = await fetch(`/api/expenses?groupId=${currentGroup.id}`);
+      if (!expensesResponse.ok) {
+        throw new Error('Failed to fetch updated expenses');
+      }
+      const updatedExpenses = await expensesResponse.json();
+
+      // Update expenses state with fresh data from database
       setExpensesByGroup(prev => ({
         ...prev,
-        [currentGroup.id]: [...(prev[currentGroup.id] || []), expense]
+        [currentGroup.id]: updatedExpenses
       }));
+
+      // Clear receipt data after successful expense creation
+      setReceiptData({ receipt: null, items: [] });
     } catch (error) {
       console.error('Error creating expense:', error);
+      alert('Failed to create expense. Please try again.');
     }
   };
 
@@ -222,6 +262,47 @@ export default function Home() {
     }
   };
 
+  // Add handler for processed receipt
+  const handleReceiptProcessed = (receipt: Receipt, items: Item[]) => {
+    setReceiptData({ receipt, items });
+    setReceiptModalOpen(true);
+  };
+
+  const handleReceiptUpdate = (updatedItems: Item[]) => {
+    setReceiptData(prevData => ({
+      ...prevData,
+      items: updatedItems,
+    }));
+  };
+
+  // Add this new function to handle group changes
+  const handleGroupChange = async (group: Group) => {
+    setCurrentGroup(group);
+
+    try {
+      // Fetch fresh expenses for the selected group
+      const expensesResponse = await fetch(`/api/expenses?groupId=${group.id}`);
+      if (!expensesResponse.ok) {
+        throw new Error('Failed to fetch expenses');
+      }
+      const expenses = await expensesResponse.json();
+
+      // Update expenses state with fresh data
+      setExpensesByGroup(prev => ({
+        ...prev,
+        [group.id]: expenses
+      }));
+
+      // Reset receipt-related states
+      setReceiptData({ receipt: null, items: [] });
+      setReceiptModalOpen(false);
+
+    } catch (error) {
+      console.error('Error loading group data:', error);
+      alert('Failed to load group data. Please try again.');
+    }
+  };
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row p-4 gap-8">
@@ -237,7 +318,7 @@ export default function Home() {
                   <Button
                     variant={currentGroup?.id === group.id ? "default" : "outline"}
                     className="w-full justify-start"
-                    onClick={() => setCurrentGroup(group)}
+                    onClick={() => handleGroupChange(group)}
                   >
                     {group.name}
                   </Button>
@@ -285,11 +366,26 @@ export default function Home() {
 
         {/* Middle: Forms and Add Expense */}
         <div className="flex-1 max-w-md space-y-8">
-          {/* Only show ExpenseForm when there's a currentGroup */}
           {currentGroup && (
-            <div className="w-full max-w-md">
+            <>
+              <ReceiptUpload onReceiptProcessed={handleReceiptProcessed} />
+
+              {/* Display receipt data if available */}
+              {receiptData.receipt && (
+
+                <ReceiptProcessor
+                  receipt={receiptData}
+                  group={currentGroup}
+                  onReceiptUpdate={handleReceiptUpdate}
+                  onExpenseAdd={handleExpenseAdd}
+                  open={receiptModalOpen}
+                  onOpenChange={setReceiptModalOpen}
+                />
+
+              )}
+
               <ExpenseForm group={currentGroup} onExpenseAdd={handleExpenseAdd} />
-            </div>
+            </>
           )}
         </div>
 
