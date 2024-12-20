@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Trash } from "lucide-react"
 import { ReceiptUpload } from "@/components/receipt-upload"
 import ReceiptProcessor from "@/components/receipt-processor"
+import { useRouter } from "next/navigation"
 
 export type Item = {
   name: string
@@ -44,7 +45,11 @@ type GroupExpenses = {
   [groupId: string]: Expense[]
 }
 
-export default function Home() {
+type HomeProps = {
+  initialGroupId?: string;
+}
+
+export default function Home({ initialGroupId }: HomeProps) {
   const { data: session } = useSession()
   const [groups, setGroups] = useState<Group[]>([])
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null)
@@ -58,6 +63,7 @@ export default function Home() {
     items: [],
   });
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const router = useRouter()
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -68,6 +74,17 @@ export default function Home() {
           // Ensure data is an array
           const groupsArray = Array.isArray(data) ? data : [];
           setGroups(groupsArray);
+
+          // If initialGroupId is provided, find and set that group
+          if (initialGroupId) {
+            const initialGroup = groupsArray.find(g => g.id === initialGroupId);
+            if (initialGroup) {
+              setCurrentGroup(initialGroup);
+              return;
+            }
+          }
+
+          // If no initialGroupId or group not found, set first group
           if (groupsArray.length > 0) {
             setCurrentGroup(groupsArray[0]);
           }
@@ -77,7 +94,7 @@ export default function Home() {
           setGroups([]);
         });
     }
-  }, [session]);
+  }, [session, initialGroupId]);
 
   useEffect(() => {
     if (currentGroup) {
@@ -278,6 +295,8 @@ export default function Home() {
   // Add this new function to handle group changes
   const handleGroupChange = async (group: Group) => {
     setCurrentGroup(group);
+    // Update URL without reloading the page
+    router.push(`/group/${group.id}`, { scroll: false });
 
     try {
       // Fetch fresh expenses for the selected group
