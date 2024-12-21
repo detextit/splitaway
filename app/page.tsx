@@ -8,11 +8,17 @@ import { Group, GroupForm } from "@/components/group-form"
 import { useState, useEffect } from "react"
 import { BalanceSummary } from "@/components/balance-summary"
 import { Button } from "@/components/ui/button"
-import { Trash } from "lucide-react"
+import { Trash, Share2 } from "lucide-react"
 import { ReceiptUpload } from "@/components/receipt-upload"
 import ReceiptProcessor from "@/components/receipt-processor"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 export type Item = {
   name: string
@@ -425,7 +431,29 @@ export default function Home({ initialGroupId }: HomeProps) {
         {currentGroup && (
           <div className={`flex-1 ${!session?.user ? 'md:w-1/2' : 'max-w-md'} space-y-8`}>
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">{currentGroup.name}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-bold">{currentGroup.name}</h2>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const url = `${window.location.origin}/group/${currentGroup.id}`;
+                          navigator.clipboard.writeText(url);
+                          alert('Link copied to clipboard!');
+                        }}
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Copy shareable link</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               {!session?.user && (
                 <Button variant="outline" onClick={() => signIn()}>
                   Sign In to view your groups
