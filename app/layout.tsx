@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import ClientWrapper from "@/components/clientWrapper";
 import { Inter } from "next/font/google";
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -35,6 +36,7 @@ export default function RootLayout({
           {children}
 
         </ClientWrapper>
+        <Toaster />
       </body>
     </html>
   );

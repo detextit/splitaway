@@ -9,8 +9,25 @@ import { useState, useEffect } from "react"
 import { BalanceSummary } from "@/components/balance-summary"
 import { Button } from "@/components/ui/button"
 import { Trash } from "lucide-react"
+import { ReceiptUpload } from "@/components/receipt-upload"
+import ReceiptProcessor from "@/components/receipt-processor"
+import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 
-// Remove mock data and add type definitions
+export type Item = {
+  name: string
+  amount: number
+  sharedWith: string[]
+}
+
+export type Receipt = {
+  id: string
+  nameOfStore: string
+  total: number
+  paidBy: string
+  date: Date
+}
+
 export type Debt = {
   name: string
   amount: number
@@ -29,32 +46,85 @@ type GroupExpenses = {
   [groupId: string]: Expense[]
 }
 
-export default function Home() {
+type HomeProps = {
+  initialGroupId?: string;
+}
+
+export default function Home({ initialGroupId }: HomeProps) {
   const { data: session } = useSession()
   const [groups, setGroups] = useState<Group[]>([])
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null)
   const [expensesByGroup, setExpensesByGroup] = useState<GroupExpenses>({})
   const [showGroupForm, setShowGroupForm] = useState(true)
+  const [receiptData, setReceiptData] = useState<{
+    receipt: Receipt | null;
+    items: Item[];
+  }>({
+    receipt: null,
+    items: [],
+  });
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const router = useRouter()
 
   useEffect(() => {
-    if (session?.user?.email) {
-      // Load user's groups
-      fetch('/api/groups')
-        .then(res => res.json())
-        .then(data => {
-          // Ensure data is an array
+    async function loadInitialGroup() {
+      // Always fetch all groups if user is authenticated
+      if (session?.user?.email) {
+        try {
+          const groupsResponse = await fetch('/api/groups');
+          const data = await groupsResponse.json();
           const groupsArray = Array.isArray(data) ? data : [];
           setGroups(groupsArray);
-          if (groupsArray.length > 0) {
+
+          // If initialGroupId is provided, set that group as current
+          if (initialGroupId) {
+            const initialGroup = groupsArray.find(g => g.id === initialGroupId);
+            if (initialGroup) {
+              setCurrentGroup(initialGroup);
+
+              // Fetch expenses for this group
+              const expensesResponse = await fetch(`/api/expenses?groupId=${initialGroupId}`);
+              if (expensesResponse.ok) {
+                const expenses = await expensesResponse.json();
+                setExpensesByGroup(prev => ({
+                  ...prev,
+                  [initialGroupId]: expenses
+                }));
+              }
+            }
+          } else if (groupsArray.length > 0) {
+            // If no initialGroupId, set first group as current
             setCurrentGroup(groupsArray[0]);
           }
-        })
-        .catch(error => {
+        } catch (error) {
           console.error('Error loading groups:', error);
           setGroups([]);
-        });
+        }
+      } else if (initialGroupId) {
+        // For unauthenticated users with initialGroupId
+        try {
+          const response = await fetch(`/api/groups/${initialGroupId}`);
+          if (response.ok) {
+            const group = await response.json();
+            setCurrentGroup(group);
+
+            const expensesResponse = await fetch(`/api/expenses?groupId=${initialGroupId}`);
+            if (expensesResponse.ok) {
+              const expenses = await expensesResponse.json();
+              setExpensesByGroup(prev => ({
+                ...prev,
+                [initialGroupId]: expenses
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error loading initial group:', error);
+        }
+      }
     }
-  }, [session]);
+
+    loadInitialGroup();
+  }, [initialGroupId, session]);
 
   useEffect(() => {
     if (currentGroup) {
@@ -94,7 +164,8 @@ export default function Home() {
       // Use the existing ID for updates, or generate new one for creation
       const groupData = {
         ...group,
-        id: groupId
+        id: groupId,
+        owner_email: session?.user?.email
       };
 
       const response = await fetch(
@@ -106,17 +177,18 @@ export default function Home() {
         }
       );
 
-      if (!response.ok) throw new Error('Failed to save group');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save group');
+      }
 
       const savedGroup = await response.json();
       setGroups(prevGroups => {
         if (isUpdate) {
-          // Update existing group
           return prevGroups.map(g =>
             g.id === groupId ? savedGroup : g
           );
         }
-        // Add new group
         return [...prevGroups, savedGroup];
       });
 
@@ -125,6 +197,11 @@ export default function Home() {
       setShowGroupForm(false);
     } catch (error) {
       console.error('Error saving group:', error);
+      if (error instanceof Error) {
+        alert(`Failed to save group: ${error.message}`);
+      } else {
+        alert('Failed to save group');
+      }
     }
   };
 
@@ -135,18 +212,35 @@ export default function Home() {
       const response = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expense, groupId: currentGroup.id })
+        body: JSON.stringify({
+          expense,
+          groupId: currentGroup.id
+        })
       });
 
-      if (!response.ok) throw new Error('Failed to create expense');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create expense');
+      }
 
-      const newExpense = await response.json();
+      // Fetch latest expenses after adding new one
+      const expensesResponse = await fetch(`/api/expenses?groupId=${currentGroup.id}`);
+      if (!expensesResponse.ok) {
+        throw new Error('Failed to fetch updated expenses');
+      }
+      const updatedExpenses = await expensesResponse.json();
+
+      // Update expenses state with fresh data from database
       setExpensesByGroup(prev => ({
         ...prev,
-        [currentGroup.id]: [...(prev[currentGroup.id] || []), expense]
+        [currentGroup.id]: updatedExpenses
       }));
+
+      // Clear receipt data after successful expense creation
+      setReceiptData({ receipt: null, items: [] });
     } catch (error) {
       console.error('Error creating expense:', error);
+      alert('Failed to create expense. Please try again.');
     }
   };
 
@@ -222,85 +316,152 @@ export default function Home() {
     }
   };
 
+  // Add handler for processed receipt
+  const handleReceiptProcessed = (receipt: Receipt, items: Item[]) => {
+    setReceiptData({ receipt, items });
+    setReceiptModalOpen(true);
+  };
+
+  const handleReceiptUpdate = (updatedItems: Item[]) => {
+    setReceiptData(prevData => ({
+      ...prevData,
+      items: updatedItems,
+    }));
+  };
+
+  // Add this new function to handle group changes
+  const handleGroupChange = async (group: Group) => {
+    setCurrentGroup(group);
+    // Update URL without reloading the page
+    router.push(`/group/${group.id}`, { scroll: false });
+
+    try {
+      // Fetch fresh expenses for the selected group
+      const expensesResponse = await fetch(`/api/expenses?groupId=${group.id}`);
+      if (!expensesResponse.ok) {
+        throw new Error('Failed to fetch expenses');
+      }
+      const expenses = await expensesResponse.json();
+
+      // Update expenses state with fresh data
+      setExpensesByGroup(prev => ({
+        ...prev,
+        [group.id]: expenses
+      }));
+
+      // Reset receipt-related states
+      setReceiptData({ receipt: null, items: [] });
+      setReceiptModalOpen(false);
+
+    } catch (error) {
+      console.error('Error loading group data:', error);
+      alert('Failed to load group data. Please try again.');
+    }
+  };
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row p-4 gap-8">
-        {/* Left: Groups Sidebar */}
-        <div className="w-full md:w-[25rem] space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Groups</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {(groups || []).map((group) => (
-                <div key={group.id} className="flex gap-2">
-                  <Button
-                    variant={currentGroup?.id === group.id ? "default" : "outline"}
-                    className="w-full justify-start"
-                    onClick={() => setCurrentGroup(group)}
-                  >
-                    {group.name}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm('Are you sure you want to delete this group?')) {
-                        handleGroupDelete(group.id);
-                      }
-                    }}
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setShowGroupForm(true)
-                  setCurrentGroup(null)
-                }}
-              >
-                + New Group
-              </Button>
-            </CardContent>
-          </Card>
+        {/* Left: Groups Sidebar - Only show for authenticated users */}
+        {session?.user ? (
+          <div className="w-full md:w-[25rem] space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Groups</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {(groups || []).map((group) => (
+                  <div key={group.id} className="flex gap-2">
+                    <Button
+                      variant={currentGroup?.id === group.id ? "default" : "outline"}
+                      className="w-full justify-start"
+                      onClick={() => handleGroupChange(group)}
+                    >
+                      {group.name}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm('Are you sure you want to delete this group?')) {
+                          handleGroupDelete(group.id);
+                        }
+                      }}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setShowGroupForm(true)
+                    setCurrentGroup(null)
+                  }}
+                >
+                  + New Group
+                </Button>
+              </CardContent>
+            </Card>
 
-          {/* Moved Group Settings here */}
-          {(showGroupForm || currentGroup) && (
+            {/* Group Settings - Only for authenticated users */}
+            {(showGroupForm || currentGroup) && (
+              <GroupForm
+                onGroupCreate={handleGroupCreate}
+                onGroupDelete={handleGroupDelete}
+                existingGroup={currentGroup}
+                defaultMember={session?.user ? {
+                  name: session.user.name || '',
+                  email: session.user.email || ''
+                } : undefined}
+              />
+            )}
+          </div>
+        ) : null}
 
-            <GroupForm
-              onGroupCreate={handleGroupCreate}
-              onGroupDelete={handleGroupDelete}
-              existingGroup={currentGroup}
-              defaultMember={session?.user ? {
-                name: session.user.name || '',
-                email: session.user.email || ''
-              } : undefined}
-            />
-          )}
-        </div>
-
-        {/* Middle: Forms and Add Expense */}
-        <div className="flex-1 max-w-md space-y-8">
-          {/* Only show ExpenseForm when there's a currentGroup */}
-          {currentGroup && (
-            <div className="w-full max-w-md">
-              <ExpenseForm group={currentGroup} onExpenseAdd={handleExpenseAdd} />
+        {/* Middle: Forms and Add Expense - Show for both authenticated and unauthenticated users */}
+        {currentGroup && (
+          <div className={`flex-1 ${!session?.user ? 'md:w-1/2' : 'max-w-md'} space-y-8`}>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">{currentGroup.name}</h2>
+              {!session?.user && (
+                <Button variant="outline" onClick={() => signIn()}>
+                  Sign In to view your groups
+                </Button>
+              )}
             </div>
-          )}
-        </div>
+            <ReceiptUpload onReceiptProcessed={handleReceiptProcessed} />
 
-        {/* Right: Balance Summary */}
-        <div className="flex-1 min-w-[350px]">
-          <BalanceSummary
-            group={currentGroup}
-            expenses={currentGroup ? expensesByGroup[currentGroup.id] || [] : []}
-            debts={calculateDebts()}
-          />
-        </div>
+            {receiptData.receipt && (
+              <ReceiptProcessor
+                receipt={receiptData}
+                group={currentGroup}
+                onReceiptUpdate={handleReceiptUpdate}
+                onExpenseAdd={handleExpenseAdd}
+                open={receiptModalOpen}
+                onOpenChange={setReceiptModalOpen}
+              />
+            )}
+
+            <ExpenseForm
+              group={currentGroup}
+              onExpenseAdd={handleExpenseAdd}
+            />
+          </div>
+        )}
+
+        {/* Right: Balance Summary - Show for both authenticated and unauthenticated users */}
+        {currentGroup && (
+          <div className={`flex-1 ${!session?.user ? 'md:w-1/2' : 'min-w-[350px]'}`}>
+            <BalanceSummary
+              group={currentGroup}
+              expenses={expensesByGroup[currentGroup.id] || []}
+              debts={calculateDebts()}
+            />
+          </div>
+        )}
       </div>
     </Layout>
   )
