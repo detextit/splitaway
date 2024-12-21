@@ -93,9 +93,9 @@ export async function getUserGroups(userEmail: string) {
         }));
     } catch (error) {
         console.error('Error in getUserGroups:', {
-            message: error.message,
-            stack: error.stack,
-            error
+            message: (error as Error).message,
+            stack: (error as Error).stack,
+            error: error
         });
         throw error;
     }
@@ -226,9 +226,9 @@ export async function getGroup(groupId: string) {
         };
     } catch (error) {
         console.error('Error in getGroup:', {
-            message: error.message,
-            stack: error.stack,
-            error
+            message: (error as Error).message,
+            stack: (error as Error).stack,
+            error: error
         });
         throw error;
     }
