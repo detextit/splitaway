@@ -197,4 +197,39 @@ export async function createExpense(expense: any, groupId: string) {
     }
 
     return rows[0];
+}
+
+export async function getGroup(groupId: string) {
+    try {
+        const { rows: [group] } = await sql`
+            SELECT 
+                g.*,
+                json_agg(
+                    json_build_object(
+                        'name', gm.user_name,
+                        'email', gm.user_email
+                    )
+                ) as members
+            FROM bill_groups g
+            JOIN bill_group_members gm ON g.id = gm.group_id
+            WHERE g.id = ${groupId}
+            GROUP BY g.id, g.name, g.owner_email, g.created_at
+        `;
+
+        if (!group) {
+            return null;
+        }
+
+        return {
+            ...group,
+            members: group.members || []
+        };
+    } catch (error) {
+        console.error('Error in getGroup:', {
+            message: error.message,
+            stack: error.stack,
+            error
+        });
+        throw error;
+    }
 } 

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { createGroup } from '@/lib/db'
 import { authOptions } from '../../auth/[...nextauth]/auth'
 import { sql } from '@vercel/postgres'
+import { getGroup } from '@/lib/db'
 
 // PUT handler for updating groups
 export async function PUT(
@@ -61,5 +62,38 @@ export async function DELETE(
     } catch (error) {
         console.error('Error deleting group:', error)
         return new NextResponse('Internal Server Error', { status: 500 })
+    }
+}
+
+export async function GET(
+    request: Request,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const session = await getServerSession(authOptions);
+        const group = await getGroup(params.id);
+
+        if (!group) {
+            return NextResponse.json({ error: 'Group not found' }, { status: 404 });
+        }
+
+        // If user is logged in, verify they are a member
+        if (session?.user?.email) {
+            const isMember = group.members.some(
+                (member: { email: string }) => member.email === session.user?.email
+            );
+
+            if (!isMember) {
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+            }
+        }
+
+        return NextResponse.json(group);
+    } catch (error) {
+        console.error('Error fetching group:', error);
+        return NextResponse.json(
+            { error: 'Failed to fetch group' },
+            { status: 500 }
+        );
     }
 } 

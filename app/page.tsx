@@ -12,6 +12,7 @@ import { Trash } from "lucide-react"
 import { ReceiptUpload } from "@/components/receipt-upload"
 import ReceiptProcessor from "@/components/receipt-processor"
 import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 
 export type Item = {
   name: string
@@ -66,35 +67,64 @@ export default function Home({ initialGroupId }: HomeProps) {
   const router = useRouter()
 
   useEffect(() => {
-    if (session?.user?.email) {
-      // Load user's groups
-      fetch('/api/groups')
-        .then(res => res.json())
-        .then(data => {
-          // Ensure data is an array
+    async function loadInitialGroup() {
+      // Always fetch all groups if user is authenticated
+      if (session?.user?.email) {
+        try {
+          const groupsResponse = await fetch('/api/groups');
+          const data = await groupsResponse.json();
           const groupsArray = Array.isArray(data) ? data : [];
           setGroups(groupsArray);
 
-          // If initialGroupId is provided, find and set that group
+          // If initialGroupId is provided, set that group as current
           if (initialGroupId) {
             const initialGroup = groupsArray.find(g => g.id === initialGroupId);
             if (initialGroup) {
               setCurrentGroup(initialGroup);
-              return;
-            }
-          }
 
-          // If no initialGroupId or group not found, set first group
-          if (groupsArray.length > 0) {
+              // Fetch expenses for this group
+              const expensesResponse = await fetch(`/api/expenses?groupId=${initialGroupId}`);
+              if (expensesResponse.ok) {
+                const expenses = await expensesResponse.json();
+                setExpensesByGroup(prev => ({
+                  ...prev,
+                  [initialGroupId]: expenses
+                }));
+              }
+            }
+          } else if (groupsArray.length > 0) {
+            // If no initialGroupId, set first group as current
             setCurrentGroup(groupsArray[0]);
           }
-        })
-        .catch(error => {
+        } catch (error) {
           console.error('Error loading groups:', error);
           setGroups([]);
-        });
+        }
+      } else if (initialGroupId) {
+        // For unauthenticated users with initialGroupId
+        try {
+          const response = await fetch(`/api/groups/${initialGroupId}`);
+          if (response.ok) {
+            const group = await response.json();
+            setCurrentGroup(group);
+
+            const expensesResponse = await fetch(`/api/expenses?groupId=${initialGroupId}`);
+            if (expensesResponse.ok) {
+              const expenses = await expensesResponse.json();
+              setExpensesByGroup(prev => ({
+                ...prev,
+                [initialGroupId]: expenses
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error loading initial group:', error);
+        }
+      }
     }
-  }, [session, initialGroupId]);
+
+    loadInitialGroup();
+  }, [initialGroupId, session]);
 
   useEffect(() => {
     if (currentGroup) {
@@ -332,97 +362,106 @@ export default function Home({ initialGroupId }: HomeProps) {
   return (
     <Layout>
       <div className="flex flex-col md:flex-row p-4 gap-8">
-        {/* Left: Groups Sidebar */}
-        <div className="w-full md:w-[25rem] space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Groups</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {(groups || []).map((group) => (
-                <div key={group.id} className="flex gap-2">
-                  <Button
-                    variant={currentGroup?.id === group.id ? "default" : "outline"}
-                    className="w-full justify-start"
-                    onClick={() => handleGroupChange(group)}
-                  >
-                    {group.name}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm('Are you sure you want to delete this group?')) {
-                        handleGroupDelete(group.id);
-                      }
-                    }}
-                  >
-                    <Trash className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setShowGroupForm(true)
-                  setCurrentGroup(null)
-                }}
-              >
-                + New Group
-              </Button>
-            </CardContent>
-          </Card>
+        {/* Left: Groups Sidebar - Only show for authenticated users */}
+        {session?.user ? (
+          <div className="w-full md:w-[25rem] space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Groups</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {(groups || []).map((group) => (
+                  <div key={group.id} className="flex gap-2">
+                    <Button
+                      variant={currentGroup?.id === group.id ? "default" : "outline"}
+                      className="w-full justify-start"
+                      onClick={() => handleGroupChange(group)}
+                    >
+                      {group.name}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm('Are you sure you want to delete this group?')) {
+                          handleGroupDelete(group.id);
+                        }
+                      }}
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setShowGroupForm(true)
+                    setCurrentGroup(null)
+                  }}
+                >
+                  + New Group
+                </Button>
+              </CardContent>
+            </Card>
 
-          {/* Moved Group Settings here */}
-          {(showGroupForm || currentGroup) && (
+            {/* Group Settings - Only for authenticated users */}
+            {(showGroupForm || currentGroup) && (
+              <GroupForm
+                onGroupCreate={handleGroupCreate}
+                onGroupDelete={handleGroupDelete}
+                existingGroup={currentGroup}
+                defaultMember={session?.user ? {
+                  name: session.user.name || '',
+                  email: session.user.email || ''
+                } : undefined}
+              />
+            )}
+          </div>
+        ) : null}
 
-            <GroupForm
-              onGroupCreate={handleGroupCreate}
-              onGroupDelete={handleGroupDelete}
-              existingGroup={currentGroup}
-              defaultMember={session?.user ? {
-                name: session.user.name || '',
-                email: session.user.email || ''
-              } : undefined}
-            />
-          )}
-        </div>
-
-        {/* Middle: Forms and Add Expense */}
-        <div className="flex-1 max-w-md space-y-8">
-          {currentGroup && (
-            <>
-              <ReceiptUpload onReceiptProcessed={handleReceiptProcessed} />
-
-              {/* Display receipt data if available */}
-              {receiptData.receipt && (
-
-                <ReceiptProcessor
-                  receipt={receiptData}
-                  group={currentGroup}
-                  onReceiptUpdate={handleReceiptUpdate}
-                  onExpenseAdd={handleExpenseAdd}
-                  open={receiptModalOpen}
-                  onOpenChange={setReceiptModalOpen}
-                />
-
+        {/* Middle: Forms and Add Expense - Show for both authenticated and unauthenticated users */}
+        {currentGroup && (
+          <div className={`flex-1 ${!session?.user ? 'md:w-1/2' : 'max-w-md'} space-y-8`}>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">{currentGroup.name}</h2>
+              {!session?.user && (
+                <Button variant="outline" onClick={() => signIn()}>
+                  Sign In to view your groups
+                </Button>
               )}
+            </div>
+            <ReceiptUpload onReceiptProcessed={handleReceiptProcessed} />
 
-              <ExpenseForm group={currentGroup} onExpenseAdd={handleExpenseAdd} />
-            </>
-          )}
-        </div>
+            {receiptData.receipt && (
+              <ReceiptProcessor
+                receipt={receiptData}
+                group={currentGroup}
+                onReceiptUpdate={handleReceiptUpdate}
+                onExpenseAdd={handleExpenseAdd}
+                open={receiptModalOpen}
+                onOpenChange={setReceiptModalOpen}
+              />
+            )}
 
-        {/* Right: Balance Summary */}
-        <div className="flex-1 min-w-[350px]">
-          <BalanceSummary
-            group={currentGroup}
-            expenses={currentGroup ? expensesByGroup[currentGroup.id] || [] : []}
-            debts={calculateDebts()}
-          />
-        </div>
+            <ExpenseForm
+              group={currentGroup}
+              onExpenseAdd={handleExpenseAdd}
+            />
+          </div>
+        )}
+
+        {/* Right: Balance Summary - Show for both authenticated and unauthenticated users */}
+        {currentGroup && (
+          <div className={`flex-1 ${!session?.user ? 'md:w-1/2' : 'min-w-[350px]'}`}>
+            <BalanceSummary
+              group={currentGroup}
+              expenses={expensesByGroup[currentGroup.id] || []}
+              debts={calculateDebts()}
+            />
+          </div>
+        )}
       </div>
     </Layout>
   )
