@@ -3,13 +3,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { ScrollArea } from "./ui/scroll-area"
-import { Expense } from "@/app/page"
-import { Group } from "./group-form"
+import { Debt, Expense } from "@/app/page"
 import { Button } from "@/components/ui/button"
 import { Bell } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog"
 import { useState } from "react"
+import { Group } from "./group-form"
 
 type Member = {
     name: string;
@@ -17,10 +17,7 @@ type Member = {
 }
 
 type BalanceSummaryProps = {
-    group: {
-        members: Member[];
-        // ... other group properties
-    } | null;
+    group: Group;
     expenses: Expense[];
     debts: Debt[];
 }
