@@ -134,7 +134,8 @@ export default function Home({ initialGroupId }: HomeProps) {
       // Use the existing ID for updates, or generate new one for creation
       const groupData = {
         ...group,
-        id: groupId
+        id: groupId,
+        owner_email: session?.user?.email
       };
 
       const response = await fetch(
@@ -146,17 +147,18 @@ export default function Home({ initialGroupId }: HomeProps) {
         }
       );
 
-      if (!response.ok) throw new Error('Failed to save group');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save group');
+      }
 
       const savedGroup = await response.json();
       setGroups(prevGroups => {
         if (isUpdate) {
-          // Update existing group
           return prevGroups.map(g =>
             g.id === groupId ? savedGroup : g
           );
         }
-        // Add new group
         return [...prevGroups, savedGroup];
       });
 
@@ -165,6 +167,11 @@ export default function Home({ initialGroupId }: HomeProps) {
       setShowGroupForm(false);
     } catch (error) {
       console.error('Error saving group:', error);
+      if (error instanceof Error) {
+        alert(`Failed to save group: ${error.message}`);
+      } else {
+        alert('Failed to save group');
+      }
     }
   };
 

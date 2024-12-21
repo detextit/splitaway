@@ -1,5 +1,16 @@
 import { sql } from '@vercel/postgres';
 
+// Add this type definition at the top of the file
+type BillGroup = {
+    id: string;
+    name: string;
+    owner_email: string;
+    members: Array<{
+        name: string;
+        email: string;
+    }>;
+};
+
 // export async function initializeDatabase() {
 //     try {
 //         // Create groups table
@@ -53,9 +64,8 @@ import { sql } from '@vercel/postgres';
 // }
 
 export async function getUserGroups(userEmail: string) {
-
     try {
-        console.log('Fetching groups for user:', userEmail); // Debug log
+        console.log('Fetching groups for user:', userEmail);
 
         const { rows } = await sql`
       SELECT 
@@ -72,10 +82,10 @@ export async function getUserGroups(userEmail: string) {
         SELECT 1 FROM bill_group_members 
         WHERE group_id = g.id AND user_email = ${userEmail}
       )
-      GROUP BY g.id, g.name, g.created_at
+      GROUP BY g.id, g.name, g.owner_email, g.created_at
     `;
 
-        console.log('Fetched groups:', rows); // Debug log
+        console.log('Fetched groups:', rows);
 
         return rows.map(row => ({
             ...row,
@@ -87,7 +97,7 @@ export async function getUserGroups(userEmail: string) {
             stack: error.stack,
             error
         });
-        throw error; // Re-throw to be caught by the API route
+        throw error;
     }
 }
 
@@ -120,17 +130,16 @@ export async function getGroupExpenses(groupId: string) {
     }
 }
 
-export async function createGroup(group: any) {
-
+export async function createGroup(group: BillGroup) {
     try {
         console.log('Creating group:', group); // Debug log
 
-        // First, create the group
+        // Updated INSERT query to include owner_email
         const { rows: [newGroup] } = await sql`
-      INSERT INTO bill_groups (id, name)
-      VALUES (${group.id}, ${group.name})
-      RETURNING *
-    `;
+            INSERT INTO bill_groups (id, name, owner_email)
+            VALUES (${group.id}, ${group.name}, ${group.owner_email})
+            RETURNING *
+        `;
 
         console.log('Group created:', newGroup); // Debug log
 
