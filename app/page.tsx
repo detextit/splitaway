@@ -8,7 +8,7 @@ import { Group, GroupForm } from "@/components/group-form"
 import { useState, useEffect } from "react"
 import { BalanceSummary } from "@/components/balance-summary"
 import { Button } from "@/components/ui/button"
-import { Trash, Share2 } from "lucide-react"
+import { Trash, Share2, Receipt, Users, Calculator } from "lucide-react"
 import { ReceiptUpload } from "@/components/receipt-upload"
 import ReceiptProcessor from "@/components/receipt-processor"
 import { useRouter } from "next/navigation"
@@ -365,6 +365,43 @@ export default function Home({ initialGroupId }: HomeProps) {
     }
   };
 
+  // If no groupId and no session, show landing page
+  if (!initialGroupId && !session) {
+    return (
+      <Layout>
+        <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center p-4 text-center">
+          <h1 className="text-4xl font-bold mb-4">Welcome to Split Away</h1>
+          <p className="text-xl text-muted-foreground mb-8 max-w-2xl">
+            The easiest way to split expenses with friends, roommates, and groups.
+            Track shared costs, scan receipts, and settle up effortlessly.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 max-w-5xl w-full">
+            <FeatureCard
+              icon={<Receipt className="w-8 h-8" />}
+              title="Smart Receipt Scanning"
+              description="Just snap a photo of your receipt and let AI do the work. We'll automatically extract and categorize expenses."
+            />
+            <FeatureCard
+              icon={<Users className="w-8 h-8" />}
+              title="Group Management"
+              description="Create groups for different occasions - roommates, trips, events. Keep your expenses organized."
+            />
+            <FeatureCard
+              icon={<Calculator className="w-8 h-8" />}
+              title="Automatic Settlements"
+              description="Get smart suggestions on how to settle debts with the minimum number of transactions."
+            />
+          </div>
+
+          <Button size="lg" onClick={() => signIn()}>
+            Get Started
+          </Button>
+        </div>
+      </Layout>
+    )
+  }
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row p-4 gap-8">
@@ -492,5 +529,26 @@ export default function Home({ initialGroupId }: HomeProps) {
         )}
       </div>
     </Layout>
+  )
+}
+
+// New FeatureCard component
+function FeatureCard({
+  icon,
+  title,
+  description
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+}) {
+  return (
+    <Card className="p-6">
+      <div className="mb-4 text-primary">
+        {icon}
+      </div>
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      <p className="text-muted-foreground">{description}</p>
+    </Card>
   )
 }

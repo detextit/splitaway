@@ -85,17 +85,11 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
     }
 
     // Update handleReminderClick to correctly get the 'to' member
-    const handleReminderClick = (toMember: Member, amount: number) => {
-        // Find the member who is owed money (the one who should be sending the reminder)
-        const fromMember = group?.members.find(m => {
-            const debt = debts.find(d => d.name === m.name);
-            return debt && debt.amount > 0;
-        });
-
+    const handleReminderClick = (toMember: Member, amount: number, creditorName: string) => {
         setEmailPreview({
             to: toMember.email,
             amount: Math.abs(amount),
-            fromName: fromMember?.name || 'Unknown'
+            fromName: creditorName
         });
     };
 
@@ -151,15 +145,29 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                     <div>
                         <p className="text-sm text-muted-foreground">Message:</p>
                         <div className="bg-background p-4 rounded-md mt-2">
-                            <p>Hello,</p>
-                            <p className="my-2">
-                                This is a friendly reminder that you owe {emailPreview?.fromName} ${emailPreview?.amount.toFixed(2)}.
-                            </p>
-                            <p>Please arrange the payment at your earliest convenience.</p>
-                            <p className="mt-4">
-                                Best regards,<br />
-                                Split App
-                            </p>
+                            <div style={{ fontFamily: 'Arial, sans-serif', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
+                                <p style={{ fontSize: '16px', color: '#444' }}>Hi there!</p>
+
+                                <p style={{ fontSize: '16px', color: '#444' }}>
+                                    Hope you're doing well! Just a friendly nudge about the shared expenses - {emailPreview?.fromName} covered ${emailPreview?.amount.toFixed(2)} and it would be great to get that squared away when you have a chance.
+                                </p>
+
+                                <div style={{ backgroundColor: '#f8f9fa', borderRadius: '8px', padding: '20px', margin: '20px 0' }}>
+                                    <p style={{ fontSize: '24px', color: '#2563eb', margin: '0', textAlign: 'center' }}>
+                                        ${emailPreview?.amount.toFixed(2)}
+                                    </p>
+                                </div>
+
+                                <p style={{ fontSize: '16px', color: '#444' }}>
+                                    No rush - whenever it's convenient for you! Thanks for helping keep our shared expenses organized.
+                                </p>
+
+                                <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '20px 0' }} />
+
+                                <p style={{ fontSize: '12px', color: '#666', textAlign: 'center' }}>
+                                    Sent via Split Away - Making shared expenses simple
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -259,7 +267,7 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            onClick={() => handleReminderClick(fromMember, -settlement.amount)}
+                                                            onClick={() => handleReminderClick(fromMember, -settlement.amount, settlement.to)}
                                                             title="Send payment reminder"
                                                         >
                                                             <Bell className="h-4 w-4" />

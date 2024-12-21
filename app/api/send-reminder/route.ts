@@ -13,16 +13,36 @@ export async function POST(request: Request) {
         }
 
         const { to, amount, fromName } = await request.json();
+        const formattedAmount = amount.toFixed(2);
 
-        const email = await resend.emails.send({
-            from: 'Split App <noreply@yourdomain.com>',
+        await resend.emails.send({
+            from: 'Split Away <noreply@splitaway.app>',
             to: [to],
-            subject: `Payment Reminder from ${fromName}`,
+            subject: `Quick reminder about shared expenses from ${fromName}`,
             html: `
-                <p>Hello,</p>
-                <p>This is a friendly reminder that you owe ${fromName} $${amount.toFixed(2)}.</p>
-                <p>Please arrange the payment at your earliest convenience.</p>
-                <p>Best regards,<br/>Split App</p>
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <p style="font-size: 16px; color: #444;">Hi there!</p>
+                    
+                    <p style="font-size: 16px; color: #444;">
+                        Hope you're doing well! Just a friendly nudge about the shared expenses - ${fromName} covered $${formattedAmount} and it would be great to get that squared away when you have a chance.
+                    </p>
+                    
+                    <div style="background-color: #f8f9fa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                        <p style="font-size: 24px; color: #2563eb; margin: 0; text-align: center;">
+                            $${formattedAmount}
+                        </p>
+                    </div>
+                    
+                    <p style="font-size: 16px; color: #444;">
+                        No rush - whenever it's convenient for you! Thanks for helping keep our shared expenses organized.
+                    </p>
+                    
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                    
+                    <p style="font-size: 12px; color: #666; text-align: center;">
+                        Sent via Split Away - Making shared expenses simple
+                    </p>
+                </div>
             `
         });
 
