@@ -9,12 +9,7 @@ import { Bell } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog"
 import { useState } from "react"
-import { Group } from "./group-form"
-
-type Member = {
-    name: string;
-    email: string;
-}
+import { Group, GroupMember } from "./group-form"
 
 type BalanceSummaryProps = {
     group: Group;
@@ -85,7 +80,12 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
     }
 
     // Update handleReminderClick to correctly get the 'to' member
-    const handleReminderClick = (toMember: Member, amount: number, creditorName: string) => {
+    const handleReminderClick = (toMember: GroupMember, amount: number, creditorName: string) => {
+        if (!toMember.email) {
+            toast.error("No email address available for this member");
+            return;
+        }
+
         setEmailPreview({
             to: toMember.email,
             amount: Math.abs(amount),
@@ -118,7 +118,7 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
     };
 
     // Find member by name helper function
-    const findMemberByName = (name: string): Member | undefined => {
+    const findMemberByName = (name: string): GroupMember | undefined => {
         return group?.members.find(m => m.name === name);
     };
 
