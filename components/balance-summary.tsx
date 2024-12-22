@@ -290,7 +290,6 @@ export function BalanceSummary({ group, expenses, debts }: BalanceSummaryProps) 
                         <ScrollArea className="h-[400px] pr-4">
                             <div className="space-y-4">
                                 {(expenses || []).map((expense, index) => {
-                                    console.log('Expense data:', expense);
                                     return (
                                         <div key={index} className="border rounded-lg p-4">
                                             <div className="flex justify-between items-start mb-2">

@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-import { UserPlus, Trash2, X } from 'lucide-react'
+import { UserPlus, Trash2, X, AlertCircle } from 'lucide-react'
 import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger } from "./ui/menubar"
+import { useSession } from 'next-auth/react'
+import { Alert, AlertDescription } from './ui/alert'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip"
 
 export type GroupMember = {
     name: string
-    email: string
+    email?: string
 }
 
 export type Group = {
@@ -27,10 +30,31 @@ export interface GroupFormProps {
 
 export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, defaultMember }: GroupFormProps) {
     const [groupName, setGroupName] = useState(existingGroup?.name || '')
-    const [members, setMembers] = useState<{ name: string; email: string }[]>(
+    const [members, setMembers] = useState<{ name: string; email?: string }[]>(
         existingGroup?.members || (defaultMember ? [defaultMember] : [])
     )
     const [newMember, setNewMember] = useState('')
+    const { data: session } = useSession()
+    const isOwner = session?.user?.email === existingGroup?.owner_email
+
+    // Add new states for tracking member removal
+    const [membersInExpenses, setMembersInExpenses] = useState<string[]>([])
+    const [attemptedRemovals, setAttemptedRemovals] = useState<string[]>([])
+
+    // Add effect to check members in expenses when group changes
+    useEffect(() => {
+        async function checkMembersInExpenses() {
+            if (existingGroup?.id) {
+                const response = await fetch(`/api/groups/${existingGroup.id}/members-in-expenses`)
+                if (response.ok) {
+                    const data = await response.json()
+                    setMembersInExpenses(data.members)
+                }
+            }
+        }
+
+        checkMembersInExpenses()
+    }, [existingGroup?.id])
 
     // Add this effect to reset form when existingGroup changes
     useEffect(() => {
@@ -40,19 +64,29 @@ export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, default
     }, [existingGroup, defaultMember])
 
     const addMember = () => {
-        setMembers([...members, { name: '', email: '' }])
+        setMembers([...members, { name: '' }])
     }
 
     const updateMember = (index: number, field: keyof GroupMember, value: string) => {
         const newMembers = [...members]
+        if (field === 'email' && !isOwner) {
+            return
+        }
         newMembers[index][field] = value
         setMembers(newMembers)
     }
 
     const removeMember = (index: number) => {
+        const memberToRemove = members[index]
+        if (membersInExpenses.includes(memberToRemove.name)) {
+            setAttemptedRemovals(prev => [...prev, memberToRemove.name])
+            return
+        }
+
         if (members.length > 1) {
             const newMembers = members.filter((_, i) => i !== index)
             setMembers(newMembers)
+            setAttemptedRemovals(prev => prev.filter(name => name !== memberToRemove.name))
         }
     }
 
@@ -71,6 +105,14 @@ export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, default
 
         onGroupCreate(newGroup)
     }
+
+    // Add function to check if update should be disabled
+    const isUpdateDisabled = () => {
+        return attemptedRemovals.length > 0 || !groupName.trim()
+    }
+
+    // Update the isOwner check to allow email field for new groups
+    const isOwnerOrNew = isOwner || !existingGroup
 
     return (
         <Card>
@@ -110,6 +152,18 @@ export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, default
                         value={groupName}
                         onChange={(e) => setGroupName(e.target.value)}
                     />
+
+                    {/* Show warning for attempted removals */}
+                    {attemptedRemovals.length > 0 && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                                Cannot remove the following members as they are part of existing expenses:
+                                {attemptedRemovals.join(', ')}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
                     {members.map((member, index) => (
                         <div key={index} className="flex gap-2 items-start">
                             <div className="flex-1 space-y-2">
@@ -118,29 +172,51 @@ export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, default
                                     value={member.name}
                                     onChange={(e) => updateMember(index, 'name', e.target.value)}
                                 />
-                                <Input
-                                    type="email"
-                                    placeholder="Email"
-                                    value={member.email}
-                                    onChange={(e) => updateMember(index, 'email', e.target.value)}
-                                />
+                                {isOwnerOrNew && (
+                                    <Input
+                                        type="email"
+                                        placeholder="Email (optional)"
+                                        value={member.email || ''}
+                                        onChange={(e) => updateMember(index, 'email', e.target.value)}
+                                    />
+                                )}
                             </div>
-                            {members.length > 1 && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeMember(index)}
-                                    className="h-8 w-8 p-0"
-                                >
-                                    <X className="h-4 w-4" />
-                                    <span className="sr-only">Remove</span>
-                                </Button>
+                            {members.length > 1 && isOwnerOrNew && (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeMember(index)}
+                                                    className="h-8 w-8 p-0"
+                                                    disabled={membersInExpenses.includes(member.name)}
+                                                    style={membersInExpenses.includes(member.name) ?
+                                                        { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                    <span className="sr-only">Remove</span>
+                                                </Button>
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            {membersInExpenses.includes(member.name)
+                                                ? "Cannot remove: Member is part of existing expenses"
+                                                : "Remove member"
+                                            }
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             )}
                         </div>
                     ))}
                     <div className="flex gap-2">
-                        <Button type="submit">
+                        <Button
+                            type="submit"
+                            disabled={isUpdateDisabled()}
+                        >
                             {existingGroup ? 'Update Group' : 'Create Group'}
                         </Button>
                     </div>

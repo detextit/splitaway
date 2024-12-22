@@ -67,7 +67,6 @@ export async function POST(request: Request) {
         });
 
         const result = response.choices[0].message.parsed;
-        console.log(result)
         return NextResponse.json(result)
     } catch (error) {
         console.error('Error processing receipt:', error)

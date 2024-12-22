@@ -85,8 +85,6 @@ export async function getUserGroups(userEmail: string) {
       GROUP BY g.id, g.name, g.owner_email, g.created_at
     `;
 
-        console.log('Fetched groups:', rows);
-
         return rows.map(row => ({
             ...row,
             members: row.members || []
@@ -132,51 +130,43 @@ export async function getGroupExpenses(groupId: string) {
 
 export async function createGroup(group: BillGroup) {
     try {
-        console.log('Creating group:', group); // Debug log
+        console.log('Creating group:', group);
 
-        // Updated INSERT query to include owner_email
+        // Insert the group
         const { rows: [newGroup] } = await sql`
             INSERT INTO bill_groups (id, name, owner_email)
             VALUES (${group.id}, ${group.name}, ${group.owner_email})
             RETURNING *
         `;
 
-        console.log('Group created:', newGroup); // Debug log
-
         // Then, insert all members
         for (const member of group.members) {
-            console.log('Adding member:', member); // Debug log
-
             await sql`
-        INSERT INTO bill_group_members (group_id, user_email, user_name)
-        VALUES (${group.id}, ${member.email}, ${member.name})
-      `;
+                INSERT INTO bill_group_members (group_id, user_email, user_name)
+                VALUES (${group.id}, ${member.email || ''}, ${member.name})
+            `;
         }
 
         // Fetch the complete group with members
         const { rows: [completeGroup] } = await sql`
-      SELECT 
-        g.*,
-        json_agg(
-          json_build_object(
-            'name', gm.user_name,
-            'email', gm.user_email
-          )
-        ) as members
-      FROM bill_groups g
-      JOIN bill_group_members gm ON g.id = gm.group_id
-      WHERE g.id = ${group.id}
-      GROUP BY g.id, g.name, g.created_at
-    `;
+            SELECT 
+                g.*,
+                json_agg(
+                    json_build_object(
+                        'name', gm.user_name,
+                        'email', gm.user_email
+                    )
+                ) as members
+            FROM bill_groups g
+            JOIN bill_group_members gm ON g.id = gm.group_id
+            WHERE g.id = ${group.id}
+            GROUP BY g.id, g.name, g.owner_email, g.created_at
+        `;
 
         return completeGroup;
     } catch (error: any) {
-        console.error('Error in createGroup:', {
-            message: error.message,
-            stack: error.stack,
-            error
-        });
-        throw error; // Re-throw to be caught by the API route
+        console.error('Error in createGroup:', error);
+        throw error;
     }
 }
 
@@ -232,4 +222,90 @@ export async function getGroup(groupId: string) {
         });
         throw error;
     }
-} 
+}
+
+// Add this new function to check if a member is part of any expenses
+export async function isMemberInExpenses(groupId: string, memberName: string) {
+    const { rows } = await sql`
+        SELECT EXISTS (
+            SELECT 1 FROM bill_expenses 
+            WHERE group_id = ${groupId} AND paid_by = ${memberName}
+            UNION
+            SELECT 1 FROM bill_expense_splits 
+            WHERE expense_id IN (SELECT id FROM bill_expenses WHERE group_id = ${groupId})
+            AND user_name = ${memberName}
+        ) as is_in_expenses
+    `;
+    return rows[0].is_in_expenses;
+}
+
+// Add this function to update a group
+export async function updateGroup(group: BillGroup) {
+    try {
+        await sql`BEGIN`;
+
+        // Update group name
+        await sql`
+            UPDATE bill_groups 
+            SET name = ${group.name}
+            WHERE id = ${group.id}
+        `;
+
+        // Get current members
+        const { rows: currentMembers } = await sql`
+            SELECT user_email, user_name 
+            FROM bill_group_members 
+            WHERE group_id = ${group.id}
+        `;
+
+        // Delete members that are not in the new list and not in any expenses
+        for (const currentMember of currentMembers) {
+            const isInNewList = group.members.some(m => m.name === currentMember.user_name);
+
+            if (!isInNewList) {
+                const isInExpenses = await isMemberInExpenses(group.id, currentMember.user_name);
+                if (!isInExpenses) {
+                    await sql`
+                        DELETE FROM bill_group_members 
+                        WHERE group_id = ${group.id} 
+                        AND user_name = ${currentMember.user_name}
+                    `;
+                }
+            }
+        }
+
+        // Update or insert members
+        for (const member of group.members) {
+            await sql`
+                INSERT INTO bill_group_members (group_id, user_email, user_name)
+                VALUES (${group.id}, ${member.email || ''}, ${member.name})
+                ON CONFLICT (group_id, user_name) 
+                DO UPDATE SET user_email = ${member.email || ''}
+            `;
+        }
+
+        await sql`COMMIT`;
+
+        // Return updated group
+        const { rows: [updatedGroup] } = await sql`
+            SELECT 
+                g.*,
+                json_agg(
+                    json_build_object(
+                        'name', gm.user_name,
+                        'email', gm.user_email
+                    )
+                ) as members
+            FROM bill_groups g
+            JOIN bill_group_members gm ON g.id = gm.group_id
+            WHERE g.id = ${group.id}
+            GROUP BY g.id, g.name, g.owner_email, g.created_at
+        `;
+
+        return updatedGroup;
+    } catch (error) {
+        await sql`ROLLBACK`;
+        console.error('Error in updateGroup:', error);
+        throw error;
+    }
+}
