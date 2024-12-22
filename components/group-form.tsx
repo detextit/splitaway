@@ -19,6 +19,7 @@ export type Group = {
     id: string
     name: string
     members: GroupMember[]
+    owner_email: string
 }
 
 export interface GroupFormProps {
@@ -100,7 +101,8 @@ export function GroupForm({ onGroupCreate, onGroupDelete, existingGroup, default
         const newGroup: Group = {
             id: existingGroup?.id || crypto.randomUUID(),
             name: groupName,
-            members
+            members,
+            owner_email: session?.user?.email || ''
         }
 
         onGroupCreate(newGroup)

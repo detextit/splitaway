@@ -189,7 +189,7 @@ export async function createExpense(expense: any, groupId: string) {
     return rows[0];
 }
 
-export async function getGroup(groupId: string) {
+export async function getGroup(groupId: string): Promise<BillGroup | null> {
     try {
         const { rows: [group] } = await sql`
             SELECT 
@@ -211,7 +211,9 @@ export async function getGroup(groupId: string) {
         }
 
         return {
-            ...group,
+            id: group.id,
+            name: group.name,
+            owner_email: group.owner_email,
             members: group.members || []
         };
     } catch (error) {
