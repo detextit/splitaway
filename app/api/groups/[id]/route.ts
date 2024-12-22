@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { createGroup } from '@/lib/db'
+import { createGroup, getGroup, updateGroup } from '@/lib/db'
 import { authOptions } from '../../auth/[...nextauth]/auth'
 import { sql } from '@vercel/postgres'
-import { getGroup } from '@/lib/db'
 
 // PUT handler for updating groups
 export async function PUT(
@@ -16,15 +15,28 @@ export async function PUT(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const group = await request.json()
-        group.id = params.id
+        const group = await getGroup(params.id)
+        if (!group) {
+            return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+        }
 
-        const updatedGroup = await createGroup(group)
+        // Check if the user is the group owner
+        if (group.owner_email !== session.user.email) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+        }
+
+        const updatedGroupData = await request.json()
+        const updatedGroup = await updateGroup({
+            ...updatedGroupData,
+            id: params.id,
+            owner_email: session.user.email
+        })
+
         return NextResponse.json(updatedGroup)
-    } catch (error) {
-        console.error('Error updating group:', error)
+    } catch (error: any) {
+        console.error('Error in PUT /api/groups/[id]:', error)
         return NextResponse.json(
-            { error: 'Failed to update group' },
+            { error: 'Failed to update group', details: error.message },
             { status: 500 }
         )
     }

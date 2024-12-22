@@ -7,7 +7,6 @@ import { v4 as uuidv4 } from 'uuid';
 export async function GET() {
     try {
         const session = await getServerSession(authOptions);
-        console.log('GET Session:', session);
 
         if (!session?.user?.email) {
             console.log('No session or email found');
@@ -15,7 +14,6 @@ export async function GET() {
         }
 
         const groups = await getUserGroups(session.user.email);
-        console.log('Groups fetched:', groups);
 
         return NextResponse.json(Array.isArray(groups) ? groups : []);
     } catch (error: any) {
@@ -31,14 +29,12 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const session = await getServerSession(authOptions);
-        console.log('POST Session:', session);
 
         if (!session?.user?.email) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const group = await request.json();
-        console.log('Received group data:', group);
 
         if (!group.id) {
             group.id = uuidv4();
@@ -52,7 +48,6 @@ export async function POST(request: Request) {
         }
 
         const newGroup = await createGroup(group);
-        console.log('Created group:', newGroup);
 
         return NextResponse.json(newGroup);
     } catch (error: any) {
